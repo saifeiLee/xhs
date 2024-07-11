@@ -138,13 +138,16 @@ class XhsClient:
             self.__session.headers.update({"x-t": signs["x-t"]})
             self.__session.headers.update({"x-s-common": signs["x-s-common"]})
         else:
+            headers_updated = self.external_sign(
+                url,
+                data,
+                a1=self.cookie_dict.get("a1"),
+                web_session=self.cookie_dict.get("web_session", ""),
+            )
+
+            # print(headers_updated)
             self.__session.headers.update(
-                self.external_sign(
-                    url,
-                    data,
-                    a1=self.cookie_dict.get("a1"),
-                    web_session=self.cookie_dict.get("web_session", ""),
-                )
+                headers_updated
             )
 
     def request(self, method, url, **kwargs):
