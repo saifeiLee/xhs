@@ -297,16 +297,6 @@ def test_get_suggest_ats(xhs_client: XhsClient):
     assert ats_keyword.upper() in ats[0]["user_base_dto"]["user_nickname"].upper()
 
 
-def test_create_simple_note(xhs_client: XhsClient):
-    title = "我是标题"
-    desc = "下面我说两点 \n 1. 第一点 \n 2. 第二点"
-    images = [
-        "/Users/reajason/Downloads/221686462282_.pic.png",
-    ]
-    note = xhs_client.create_image_note(title, desc, images, is_private=True, post_time="2023-07-25 23:59:59")
-    beauty_print(note)
-
-
 def test_create_note_with_ats_topics(xhs_client: XhsClient):
     title = "我是通过自动发布脚本发送的笔记"
     desc = "deployed by GitHub xhs， #Python[话题]# @ReaJason"
@@ -341,4 +331,15 @@ def test_create_video_note_with_cover(xhs_client: XhsClient):
     note = xhs_client.create_video_note(title="123123", video_path="/Users/reajason/Downloads/2.mp4", desc="",
                                         cover_path="/Users/reajason/Downloads/221686462282_.pic.jpg",
                                         is_private=True)
+    beauty_print(note)
+
+
+def test_create_simple_note(xhs_client: XhsClient):
+    title = "我是标题"
+    desc = "下面我说两点 \n 1. 第一点 \n 2. 第二点"
+    images = [
+        "/Users/lisaifei/Downloads/test.png",
+    ]
+    note = xhs_client.create_image_note(title, desc, images, is_private=True, post_time="2024-07-02 08:59:59")
+    print(f"note: {note}")
     beauty_print(note)
