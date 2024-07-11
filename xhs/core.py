@@ -1017,3 +1017,15 @@ class XhsClient:
         }
         return self.create_note(title, desc, NoteType.VIDEO.value, ats=ats, topics=topics, video_info=video_info,
                                 post_time=post_time, is_private=is_private)
+
+    def register_captcha(self, verify_id: str):
+        uri = "/api/redcaptcha/v2/captcha/register"
+        json_data = {
+            "captchaVersion": "1.2.1",
+            "secretId": "000",
+            "sourceSite": "",
+            "verifyBiz": 471,
+            "verifyType": "102",
+            "verifyUuid": verify_id,
+        }
+        return self.post(uri, data=json_data)

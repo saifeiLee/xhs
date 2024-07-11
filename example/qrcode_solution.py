@@ -1,11 +1,13 @@
+import time
 import datetime
 import pprint
 import json
-from .xhs_predict import predict_rotation_angle
-from .sign import sign
-
-
+import os
+import requests
+from playwright.sync_api import sync_playwright
 from xhs import DataFetchError, XhsClient, help, SignError
+from .sign import sign
+from .xhs_predict import predict_rotation_angle
 
 import requests
 import logging
@@ -26,57 +28,48 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def get_qrcode(xhs_client: XhsClient):
-    res = xhs_client.get_qrcode()
-    pprint.pprint(res)
+def handle_captcha(verify_uuid: str):
+    logger.info("开始处理验证码")
+    verifyType = 102
+    verifyBiz = 461
+    with sync_playwright() as playwright:
+        stealth_js_path = "/Users/lisaifei/code/js/stealth.min.js/stealth.min.js"
+        chromium = playwright.chromium
+        # 如果一直失败可尝试设置成 False 让其打开浏览器，适当添加 sleep 可查看浏览器状态
+        browser = chromium.launch(headless=True)
 
+        browser_context = browser.new_context()
+        browser_context.add_init_script(path=stealth_js_path)
+        context_page = browser_context.new_page()
+        captcha_base_url = f"https://www.xiaohongshu.com/website-login/captcha?verifyUuid={verify_uuid}&verifyType={verifyType}&verifyBiz={verifyBiz}"
 
-def get_user_notes(xhs_client: XhsClient, user_id):
-    res = xhs_client.get_user_notes(user_id)
-    pprint.pprint(res)
-
-
-def test_all_account():
-    host = 'http://test-api.gaotu.cn'
-    all_account = requests.get(f'{host}/ai/xhs/accounts').json()
-    abnormal_account = []
-    for account in all_account["data"]:
-        try:
-            id = account.get('id')
-            xhs_id = account.get('xhs_id')
-            web_session = account.get('web_session')
-            cookies = {
-                "sec_poison_id": "1c7fd026-f6af-4f4f-9519-63d6a52fe2c7",
-                "gid": "yYiW4dqDYiEJyYiW4dqD8lCxdJ6KV0F03AS07U80VIYD6yq8uqWK2W888y2K2KJ8K8JJKiYi",
-                "a1": "18f74e3b0e2m6jaraiqcaajn8bmz3765wou17xhp030000156562",
-                "websectiga": "10f9a40ba454a07755a08f27ef8194c53637eba4551cf9751c009d9afb564467",
-                "webId": "6cf889e2d027fb9172e3e69efc3394dc",
-                "web_session": web_session,
-                "xsecappid": "xhs-pc-web",
-                "webBuild": "4.21.0",
-            }
-            cookie_str = ";".join([f"{k}={v}" for k, v in cookies.items()])
-            xhs_client = XhsClient(cookie_str, sign=sign)
-            res = xhs_client.get_note_by_keyword("美食")
-            logger.info(f"账号: {xhs_id}; 搜索结果:{res}")
-        except SignError as e:
-            logger.info(f"登录过期. {e}, xhs_id: {xhs_id}")
-            abnormal_account.append(xhs_id)
-        except DataFetchError as e:
-            logger.info(f"出错了. {e}, xhs_id: {xhs_id}")
-            abnormal_account.append(xhs_id)
-
-    logger.info(f"异常账号: {abnormal_account}")
-
-
-def create_simple_note(xhs_client: XhsClient):
-    title = "北京今天的天气太好了"
-    desc = "7月的北京。\n这样的天气\n实在是难得。"
-    images = [
-        "/Users/lisaifei/Downloads/test.png",
-    ]
-    note = xhs_client.create_image_note(title, desc, images, is_private=True, post_time="2024-07-02 08:59:59")
-    print(f"note: {note}")
+        context_page.goto(f"{captcha_base_url}")
+        captcha_rotate_elm_id = "red-captcha-rotate"
+        captcha_rotate_bg_elm_id = "red-captcha-rotate-bg"
+        rotate_img_elm = context_page.wait_for_selector(f"#{captcha_rotate_elm_id} img")
+        rotate_bg_img_elm = context_page.wait_for_selector(f"#{captcha_rotate_bg_elm_id} img")
+        logger.info(f"获取验证码图片: {rotate_img_elm}")
+        rotate_img_elm_src = rotate_img_elm.get_attribute("src")
+        logger.info(f"获取验证码图片地址: {rotate_img_elm_src}")
+        rotate_bg_img_elm_src = rotate_bg_img_elm.get_attribute("src")
+        logger.info(f"获取验证码背景图片地址: {rotate_bg_img_elm_src}")
+        cur_file_dir = os.path.dirname(os.path.abspath(__file__))
+        image_dir = f"{cur_file_dir}/images"
+        if not os.path.exists(image_dir):
+            os.makedirs(image_dir)
+        # download image
+        response = requests.get(rotate_img_elm_src)
+        date_str = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        captcha_rotate_img_path = f"{image_dir}/captcha_rotate_img_{date_str}.jpg"
+        with open(f"{captcha_rotate_img_path}", "wb") as f:
+            f.write(response.content)
+        captcha_rotate_bg_img_path = f"{image_dir}/captcha_rotate_bg_img_{date_str}.jpg"
+        response = requests.get(rotate_bg_img_elm_src)
+        with open(f"{captcha_rotate_bg_img_path}", "wb") as f:
+            f.write(response.content)
+        # 获取旋转角度
+        predict_angle = predict_rotation_angle(captcha_rotate_img_path)
+        logger.info(f"预测旋转角度: {predict_angle}")
 
 
 if __name__ == '__main__':
@@ -112,16 +105,7 @@ if __name__ == '__main__':
         try:
             note_id = '6603aa330000000014005158'
             comment_id = '660f9a6f000000001503883c'
-            # 发布笔记
-            # create_simple_note(xhs_client)
-            # 获取笔记评论
-            # comments = xhs_client.get_note_comments(note_id)
-            # print(json.dumps(comments, indent=4))
 
-            # get_user_notes(xhs_client, '657bfadf00000000190105ca')
-            # get_user_notes(xhs_client,'612b910b0000000001014a10')
-            # 获取二维码
-            # get_qrcode(xhs_client)
             # 获取笔记详情
             # note = xhs_client.get_note_by_id(note_id)
             # pprint.pprint(note)
@@ -129,16 +113,9 @@ if __name__ == '__main__':
             # print(json.dumps(note, indent=4))
             # 获取笔记图片
             # print(help.get_imgs_url_from_note(note))
-            # 点赞评论
-            # xhs_client.like_comment(note_id=note_id, comment_id=comment_id)
 
-            # 搜索笔记
-
-            # emojis = xhs_client.get_emojis()
-            # print(emojis)
-            # mention = xhs_client.get_mention_notifications()
-            # print(mention)
-
+            verify_uuid = "276c3d06-2c55-4d5e-a96b-0a518e0f0d76*qYgPPlAG"
+            handle_captcha(verify_uuid)
             break
 
         except DataFetchError as e:
