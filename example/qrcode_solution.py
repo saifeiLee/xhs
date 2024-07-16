@@ -1,6 +1,6 @@
 import time
 import datetime
-import pprint
+import random
 import json
 import os
 import requests
@@ -28,6 +28,28 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def get_tracks(distance: int) -> list[int]:
+    tracks = []
+    current = 0
+    mid = distance * 4 / 5
+    t = 0.2
+    v = 0
+
+    while current < distance:
+        if current < mid:
+            a = random.randint(3, 5)
+        else:
+            a = random.randint(-5, -3)
+
+        v0 = v
+        v = v0 + a * t
+        move = v0 * t + 1 / 2 * a * t * t
+        current += move
+        tracks.append(round(current))
+
+    return tracks
+
+
 def handle_captcha(verify_uuid: str):
     logger.info("开始处理验证码")
     verifyType = 102
@@ -36,12 +58,13 @@ def handle_captcha(verify_uuid: str):
         stealth_js_path = "/Users/lisaifei/code/js/stealth.min.js/stealth.min.js"
         chromium = playwright.chromium
         # 如果一直失败可尝试设置成 False 让其打开浏览器，适当添加 sleep 可查看浏览器状态
-        browser = chromium.launch(headless=True)
+        browser = chromium.launch(headless=False)
 
         browser_context = browser.new_context()
         browser_context.add_init_script(path=stealth_js_path)
         context_page = browser_context.new_page()
-        captcha_base_url = f"https://www.xiaohongshu.com/website-login/captcha?verifyUuid={verify_uuid}&verifyType={verifyType}&verifyBiz={verifyBiz}"
+        # captcha_base_url = f"https://www.xiaohongshu.com/website-login/captcha?verifyUuid={verify_uuid}&verifyType={verifyType}&verifyBiz={verifyBiz}"
+        captcha_base_url = f"https://www.xiaohongshu.com/website-login/captcha"
 
         context_page.goto(f"{captcha_base_url}")
         captcha_rotate_elm_id = "red-captcha-rotate"
@@ -70,6 +93,29 @@ def handle_captcha(verify_uuid: str):
         # 获取旋转角度
         predict_angle = predict_rotation_angle(captcha_rotate_img_path)
         logger.info(f"预测旋转角度: {predict_angle}")
+
+        captcha_slider = context_page.wait_for_selector('//div[@class="red-captcha-slider"]')
+        slider_box = captcha_slider.bounding_box()
+        move_x = predict_angle * 0.79
+        slider_center_x = slider_box["x"] + slider_box["width"] / 2
+        slider_center_y = slider_box["y"] + slider_box["height"] / 2
+        logger.info(f"滑块中心坐标: ({slider_center_x}, {slider_center_y})")
+        context_page.mouse.move(slider_center_x, slider_center_y)
+        context_page.mouse.down()
+        tracks = get_tracks(move_x)
+        logger.info(f"轨迹数据: {tracks}")
+        for track in tracks:
+            target_x = slider_box["x"] + slider_box["width"] / 2 + track
+            target_y = slider_box["y"] + slider_box["height"] / 2
+            context_page.mouse.move(target_x, target_y)
+        context_page.mouse.up()
+        time.sleep(3)
+        if context_page.query_selector('//div[@class="red-captcha-slider"]') is None:
+            logger.info("验证成功")
+        else:
+            logger.info("验证失败")
+
+        time.sleep(1000)
 
 
 if __name__ == '__main__':
